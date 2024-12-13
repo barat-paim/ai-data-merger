@@ -1,0 +1,17 @@
+venv/
+venv/*
+node_modules/
+npm-debug.log
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+.env
+.venv
+.db
+
+# Database files
+*.db
+
+# SQL files
+*.sql
