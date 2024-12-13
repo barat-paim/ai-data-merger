@@ -15,6 +15,16 @@ import sys
 import datetime
 from pathlib import Path
 
+# Move these functions to the top of the file, right after the imports
+def get_project_root() -> Path:
+    """Get the project root directory."""
+    return Path.cwd()
+
+def generate_unique_filename(prefix: str = "merged_db") -> str:
+    """Generate a unique filename with timestamp."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{prefix}_{timestamp}.db"
+
 # Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -182,49 +192,76 @@ if st.button("Merge Datasets"):
                         st.dataframe(df2.iloc[matched_indices], use_container_width=True)
                 
                 # Export options
-                st.subheader("Export Options")
-                if st.button("Export as SQLite"):
-                    logger.info("Export button clicked")
-                    try:
-                        # Create output directory if it doesn't exist
-                        output_dir = Path("merged_databases")
-                        output_dir.mkdir(exist_ok=True)
-                        
-                        # Generate unique filename
-                        filename = generate_unique_filename()
-                        output_path = output_dir / filename
-                        
-                        logger.info(f"Saving merged database to: {output_path}")
-                        export_to_sqlite(merged_df, str(output_path))
-                        logger.info("Database saved successfully")
-                        
-                        # Provide both download and local path information
-                        st.success(f"Database saved locally at: {output_path}")
-                        
-                        with open(output_path, 'rb') as f:
-                            logger.debug("Preparing download button")
-                            st.download_button(
-                                label="Download merged database",
-                                data=f,
-                                file_name=filename,
-                                mime="application/x-sqlite3"
-                            )
-                        
-                        # Display additional file information
-                        file_size = output_path.stat().st_size / (1024 * 1024)  # Convert to MB
-                        logger.info(f"File size: {file_size:.2f} MB")
-                        st.info(f"""
-                        File Details:
-                        - Size: {file_size:.2f} MB
-                        - Location: {output_path.absolute()}
-                        - Timestamp: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-                        """)
-                        
-                    except Exception as e:
-                        logger.error(f"Error during export: {str(e)}", exc_info=True)
-                        st.error(f"Error during export: {str(e)}")
+                st.session_state.merged_df = merged_df  # Store merged df in session state
+                st.session_state.merge_completed = True  # Flag to indicate merge is done
 
-def generate_unique_filename(prefix: str = "merged_db") -> str:
-    """Generate a unique filename with timestamp."""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{prefix}_{timestamp}.db"
+# Export functionality
+if 'merge_completed' in st.session_state and st.session_state.merge_completed:
+    st.subheader("Export Options")
+    export_col1, export_col2 = st.columns(2)
+    
+    with export_col1:
+        export_button = st.button("Save as SQLite Database")
+        if export_button:
+            try:
+                logger.info("Starting export process...")
+                
+                # Create output directory in current working directory
+                current_dir = Path.cwd()
+                output_dir = current_dir / "merged_databases"
+                output_dir.mkdir(exist_ok=True)
+                logger.debug(f"Created output directory: {output_dir}")
+                
+                # Generate unique filename
+                filename = generate_unique_filename()
+                output_path = output_dir / filename
+                logger.info(f"Generated output path: {output_path}")
+                
+                # Export the DataFrame
+                export_to_sqlite(st.session_state.merged_df, str(output_path))
+                
+                # Verify file exists
+                if output_path.exists():
+                    file_size = output_path.stat().st_size / (1024 * 1024)  # Convert to MB
+                    logger.info(f"File saved successfully. Size: {file_size:.2f} MB")
+                    
+                    # Show success message with file details
+                    st.success(f"""
+                    ✅ Database saved successfully!
+                    
+                    📁 Location: {output_path.absolute()}
+                    📊 Size: {file_size:.2f} MB
+                    🕒 Saved at: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                    """)
+                    
+                    # Show in file explorer option
+                    if st.button("Open Containing Folder"):
+                        if os.name == 'nt':  # Windows
+                            os.startfile(output_dir)
+                        elif os.name == 'posix':  # macOS and Linux
+                            os.system(f'open "{output_dir}"')
+                else:
+                    logger.error(f"File not found after saving: {output_path}")
+                    st.error("File was not saved successfully. Check logs for details.")
+                
+            except Exception as e:
+                logger.error(f"Export failed: {str(e)}", exc_info=True)
+                st.error(f"❌ Error saving file: {str(e)}")
+    
+    with export_col2:
+        if 'merged_df' in st.session_state:
+            # Download button
+            temp_path = Path("temp_download.db")
+            export_to_sqlite(st.session_state.merged_df, str(temp_path))
+            
+            with open(temp_path, 'rb') as f:
+                st.download_button(
+                    label="Download Database",
+                    data=f,
+                    file_name=filename if 'filename' in locals() else generate_unique_filename(),
+                    mime="application/x-sqlite3",
+                    help="Download the merged database to your computer"
+                )
+            
+            # Clean up temporary file
+            temp_path.unlink(missing_ok=True)
