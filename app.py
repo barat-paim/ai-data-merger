@@ -16,16 +16,25 @@ import datetime
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('app.log')
-    ]
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Create formatters and handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(formatter)
+console_handler.setLevel(logging.DEBUG)
+
+# File handler
+file_handler = logging.FileHandler('app.log')
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.DEBUG)
+
+# Add handlers to logger
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
 
 st.set_page_config(page_title="Dataset Manager", layout="wide")
 
