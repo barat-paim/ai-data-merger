@@ -59,13 +59,22 @@ class DatasetMerger:
         Returns:
             Tuple of merged DataFrame and merge statistics
         """
-        # Verify schema compatibility
-        if set(df1.columns) != set(df2.columns):
-            raise ValueError("DataFrames must have identical columns")
+        # Find common columns
+        common_columns = list(set(df1.columns).intersection(set(df2.columns)))
+        if not common_columns:
+            raise ValueError("No common columns found between datasets")
 
-        # Prepare text representations
-        texts1 = self._prepare_text_representation(df1)
-        texts2 = self._prepare_text_representation(df2)
+        # Get unique columns from each dataset
+        unique_cols_df1 = list(set(df1.columns) - set(df2.columns))
+        unique_cols_df2 = list(set(df2.columns) - set(df1.columns))
+
+        # Use only common columns for similarity comparison
+        df1_common = df1[common_columns]
+        df2_common = df2[common_columns]
+
+        # Prepare text representations using only common columns
+        texts1 = self._prepare_text_representation(df1_common)
+        texts2 = self._prepare_text_representation(df2_common)
 
         # Compute embeddings
         print("Computing embeddings for first dataset...")
@@ -94,17 +103,36 @@ class DatasetMerger:
         unmatched_df1_indices = set(range(len(df1))) - set(p[0] for p in matched_pairs)
         unmatched_df2_indices = set(range(len(df2))) - set(p[1] for p in matched_pairs)
 
-        # Add matched rows (using df1 version)
-        for idx1, _, _ in matched_pairs:
-            merged_rows.append(df1.iloc[idx1])
+        # Initialize merged DataFrame with all possible columns
+        all_columns = list(set(df1.columns) | set(df2.columns))
+        merged_df = pd.DataFrame(columns=all_columns)
 
-        # Add unmatched rows from both datasets
+        # Add matched rows
+        for idx1, idx2, _ in matched_pairs:
+            merged_row = {}
+            # Add common columns from df1
+            for col in common_columns:
+                merged_row[col] = df1.iloc[idx1][col]
+            # Add unique columns from both dataframes
+            for col in unique_cols_df1:
+                merged_row[col] = df1.iloc[idx1][col]
+            for col in unique_cols_df2:
+                merged_row[col] = df2.iloc[idx2][col]
+            merged_rows.append(merged_row)
+
+        # Add unmatched rows from df1
         for idx in unmatched_df1_indices:
-            merged_rows.append(df1.iloc[idx])
-        for idx in unmatched_df2_indices:
-            merged_rows.append(df2.iloc[idx])
+            merged_row = {col: df1.iloc[idx][col] if col in df1.columns else None 
+                         for col in all_columns}
+            merged_rows.append(merged_row)
 
-        merged_df = pd.DataFrame(merged_rows, columns=df1.columns)
+        # Add unmatched rows from df2
+        for idx in unmatched_df2_indices:
+            merged_row = {col: df2.iloc[idx][col] if col in df2.columns else None 
+                         for col in all_columns}
+            merged_rows.append(merged_row)
+
+        merged_df = pd.DataFrame(merged_rows, columns=all_columns)
 
         # Compile statistics
         stats = {
@@ -112,7 +140,10 @@ class DatasetMerger:
             'unmatched_df1': len(unmatched_df1_indices),
             'unmatched_df2': len(unmatched_df2_indices),
             'total_rows': len(merged_df),
-            'matched_pairs': matched_pairs  # Include the matched pairs in stats
+            'common_columns': common_columns,
+            'unique_cols_df1': unique_cols_df1,
+            'unique_cols_df2': unique_cols_df2,
+            'matched_pairs': matched_pairs
         }
 
-        return merged_df, stats 
+        return merged_df, stats

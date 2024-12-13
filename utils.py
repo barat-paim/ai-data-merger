@@ -4,6 +4,7 @@ from typing import Tuple, List
 from sqlalchemy import create_engine, inspect
 import tempfile
 import os
+import logging
 
 def save_uploaded_file(uploaded_file) -> str:
     """Save an uploaded file to a temporary location and return the path."""
@@ -49,35 +50,39 @@ def validate_schema_compatibility(df1: pd.DataFrame, df2: pd.DataFrame) -> bool:
     Validate if two DataFrames have compatible schemas.
     
     Returns:
-        bool: True if schemas are compatible, False otherwise
+        bool: True if there are common columns between the datasets
     """
-    return (
-        set(df1.columns) == set(df2.columns) and
-        all(df1[col].dtype == df2[col].dtype for col in df1.columns)
-    )
+    common_columns = set(df1.columns).intersection(set(df2.columns))
+    return len(common_columns) > 0
 
 def export_to_sqlite(df: pd.DataFrame, output_path: str, table_name: str = 'merged_data'):
     """Export DataFrame to SQLite database."""
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting export to SQLite: {output_path}")
+    
     try:
-        # Create SQLite connection
+        logger.debug(f"Creating SQLite connection to: {output_path}")
         conn = sqlite3.connect(output_path)
         
-        # Drop the existing table if it exists
+        logger.debug(f"Dropping existing table if exists: {table_name}")
         cursor = conn.cursor()
         cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
         conn.commit()
         
-        # Write the new data
+        logger.info(f"Writing DataFrame to SQLite (rows: {len(df)}, columns: {len(df.columns)})")
         df.to_sql(table_name, conn, index=False, if_exists='replace')
         
-        # Verify the write
+        logger.debug("Verifying written data")
         written_df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
         if not written_df.equals(df):
             raise ValueError("Data verification failed")
-            
+        
+        logger.debug("Committing changes and closing connection")
         conn.commit()
         conn.close()
         
+        logger.info("Export completed successfully")
         return output_path
     except Exception as e:
+        logger.error(f"Error during export: {str(e)}", exc_info=True)
         raise Exception(f"Error exporting to SQLite: {str(e)}")
