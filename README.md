@@ -1,49 +1,78 @@
-# Dataset Merger with ML
+# ML-Powered Dataset Merger
 
-This project provides a machine learning-based solution for merging two datasets with the same schema but different rows. It uses Hugging Face's sentence transformers for semantic similarity matching and provides a Streamlit interface for easy interaction.
+A powerful Streamlit application that intelligently merges SQLite databases using machine learning. The app uses BERT-based semantic similarity matching to identify and merge related records across different databases, even when they have different schemas.
 
 ## Features
 
-- Upload and process SQL database files
-- ML-based dataset merging using sentence transformers
-- Interactive Streamlit interface for visualization
-- Configurable similarity thresholds
-- Export merged results
+- **Intelligent Merging**: Uses the `all-MiniLM-L6-v2` BERT model to compute semantic similarity between records
+- **Flexible Schema Handling**: Can merge databases with different schemas, preserving all columns
+- **Interactive UI**: Clear visualization of data and merge statistics
+- **Comprehensive Logging**: Detailed logging of all operations for debugging
+- **Export Options**: 
+  - Save merged databases locally with timestamps
+  - Download merged databases directly
+  - View merge statistics and previews
 
-## Setup
+## Requirements
 
-1. Create a virtual environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+streamlit
+pandas
+sentence-transformers
+torch
+scikit-learn
+sqlite3
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
+## Usage
+
+1. Run the application:
+   ```bash
+   streamlit run app.py
+   ```
+
+2. Upload two SQLite databases
+3. Select tables to merge
+4. Adjust similarity threshold if needed
+5. Click "Merge Datasets" to start the process
+6. Export the merged database in your preferred format
+
+## Key Achievements
+
+1. **Semantic Matching**: Successfully implemented ML-based record matching using BERT embeddings
+2. **Flexible Schema Support**: 
+   - Handles databases with different column structures
+   - Preserves unique columns from both sources
+   - Intelligently matches based on common columns
+3. **Robust Error Handling**:
+   - Validates database compatibility
+   - Provides clear error messages
+   - Includes comprehensive logging
+4. **User Experience**:
+   - Interactive data previews
+   - Clear merge statistics
+   - Progress indicators
+   - Multiple export options
+
+## Output
+
+Merged databases are saved in the `merged_databases` directory with timestamps for easy tracking. Each export includes:
+- The merged SQLite database
+- Detailed merge statistics
+- Logging information in `app.log`
+
+## Notes
+
+- The similarity threshold can be adjusted (0.0 to 1.0) to control matching strictness
+- Higher thresholds result in more precise but fewer matches
+- Lower thresholds increase matches but may include less certain pairs
 ```
 
-3. Run the Streamlit app:
-```bash
-streamlit run app.py
-```
+This README provides a comprehensive overview of:
+1. What the application does
+2. Its key features and achievements
+3. How to use it
+4. Technical requirements
+5. Important implementation details
 
-## How it works
-
-1. The system uses sentence transformers from Hugging Face to encode row data
-2. Semantic similarity is computed between rows from both datasets
-3. Similar rows are merged based on configurable threshold
-4. Results are presented in an interactive interface
-
-## Project Structure
-
-- `app.py`: Main Streamlit application
-- `merger.py`: Core dataset merging logic
-- `utils.py`: Utility functions for data processing
-- `requirements.txt`: Project dependencies
-
-
-# format of the database
-1. table name: typing_stats
-2. tables are stored in the format of: table_name.sql
-3. it can be converted to csv by using: sqlite3 table_name.sql -csv > table_name.csv
+Would you like me to add or modify any specific section of the README?
