@@ -1,5 +1,6 @@
 import sqlite3
 import pandas as pd
+import os
 
 # Input database name on terminal
 database_name = input("Enter the database name: ")
@@ -21,7 +22,8 @@ action = input("What do you want to do? \n"
                "1. Add a new column \n"
                "2. Delete a column \n"
                "3. Show all columns in a table \n"
-               "4. Exit \n")
+               "4. Convert table to CSV \n"
+               "5. Exit \n")
 
 if action == '1':
     new_column_name = input("Enter the name of the new column: ")
@@ -67,6 +69,13 @@ elif action == '3':
         print(f"- {column[1]} ({column[2]})")  # Print each column name and type
 
 elif action == '4':
+    # Convert the selected table to CSV
+    df = pd.read_sql_query(f"SELECT * FROM {table_name};", conn)
+    csv_file_name = f"{table_name}.csv"
+    df.to_csv(csv_file_name, index=False)
+    print(f"Table '{table_name}' has been converted to CSV and saved as '{csv_file_name}' in the current directory.")
+
+elif action == '5':
     print("Exiting the program.")
 
 else:
