@@ -2,28 +2,28 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 import torch
 from tqdm import tqdm
 import warnings
 import logging
+from preprocessor import DataPreprocessor
 
 # Suppress specific PyTorch warnings
 warnings.filterwarnings('ignore', message='.*torch.classes.*')
 logging.getLogger('transformers').setLevel(logging.ERROR)
 
 class DatasetMerger:
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
-        """Initialize the dataset merger with a specific sentence transformer model."""
-        # Suppress torch warnings during model loading
+    def __init__(self, model_name: str = 'all-MiniLM-L6-v2', jellyfish_model_path: Optional[str] = None):
+        """Initialize the dataset merger with both BERT and Jellyfish models."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.model = SentenceTransformer(model_name)
+            self.bert_model = SentenceTransformer(model_name)
         
+        self.preprocessor = DataPreprocessor(jellyfish_model_path)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        # Move model to device without logging
         torch.set_grad_enabled(False)
-        self.model.to(self.device)
+        self.bert_model.to(self.device)
 
     def _prepare_text_representation(self, df: pd.DataFrame) -> List[str]:
         """Convert DataFrame rows to text representation."""
@@ -41,7 +41,7 @@ class DatasetMerger:
 
         for i in tqdm(range(0, len(texts), batch_size)):
             batch = texts[i:i + batch_size]
-            batch_embeddings = self.model.encode(batch)
+            batch_embeddings = self.bert_model.encode(batch)
             embeddings.extend(batch_embeddings)
 
         return np.array(embeddings)
@@ -49,101 +49,101 @@ class DatasetMerger:
     def merge_datasets(self, df1: pd.DataFrame, df2: pd.DataFrame, 
                       similarity_threshold: float = 0.8) -> Tuple[pd.DataFrame, Dict]:
         """
-        Merge two datasets based on semantic similarity.
-        
-        Args:
-            df1: First DataFrame
-            df2: Second DataFrame
-            similarity_threshold: Minimum similarity score to consider a match
-            
-        Returns:
-            Tuple of merged DataFrame and merge statistics
+        Merge two datasets using both Jellyfish preprocessing and BERT-based matching.
         """
-        # Find common columns
-        common_columns = list(set(df1.columns).intersection(set(df2.columns)))
-        if not common_columns:
-            raise ValueError("No common columns found between datasets")
-
-        # Get unique columns from each dataset
-        unique_cols_df1 = list(set(df1.columns) - set(df2.columns))
-        unique_cols_df2 = list(set(df2.columns) - set(df1.columns))
-
-        # Use only common columns for similarity comparison
-        df1_common = df1[common_columns]
-        df2_common = df2[common_columns]
-
-        # Prepare text representations using only common columns
-        texts1 = self._prepare_text_representation(df1_common)
-        texts2 = self._prepare_text_representation(df2_common)
-
-        # Compute embeddings
-        print("Computing embeddings for first dataset...")
-        embeddings1 = self._compute_embeddings(texts1)
-        print("Computing embeddings for second dataset...")
-        embeddings2 = self._compute_embeddings(texts2)
-
-        # Compute similarity matrix
-        print("Computing similarity matrix...")
-        similarity_matrix = cosine_similarity(embeddings1, embeddings2)
-
-        # Find matches
-        matched_pairs = []
-        used_indices_df2 = set()
-
-        for idx1, similarities in enumerate(similarity_matrix):
-            best_match_idx = np.argmax(similarities)
-            best_match_score = similarities[best_match_idx]
+        logger.info("Starting enhanced dataset merge process")
+        
+        try:
+            # Preprocess datasets using Jellyfish
+            df1_processed, df2_processed, schema_matches = self.preprocessor.preprocess_datasets(df1, df2)
+            logger.info(f"Preprocessing complete. Schema matches found: {schema_matches}")
             
-            if best_match_score >= similarity_threshold and best_match_idx not in used_indices_df2:
-                matched_pairs.append((idx1, best_match_idx, best_match_score))
-                used_indices_df2.add(best_match_idx)
+            # Use schema matches to align columns for comparison
+            common_columns = list(schema_matches.keys())
+            df1_common = df1_processed[common_columns]
+            df2_common = df2_processed[[schema_matches[col] for col in common_columns]]
+            
+            # Prepare text representations using aligned columns
+            texts1 = self._prepare_text_representation(df1_common)
+            texts2 = self._prepare_text_representation(df2_common)
+            
+            # Compute embeddings
+            print("Computing embeddings for first dataset...")
+            embeddings1 = self._compute_embeddings(texts1)
+            print("Computing embeddings for second dataset...")
+            embeddings2 = self._compute_embeddings(texts2)
 
-        # Create merged dataset
-        merged_rows = []
-        unmatched_df1_indices = set(range(len(df1))) - set(p[0] for p in matched_pairs)
-        unmatched_df2_indices = set(range(len(df2))) - set(p[1] for p in matched_pairs)
+            # Compute similarity matrix
+            print("Computing similarity matrix...")
+            similarity_matrix = cosine_similarity(embeddings1, embeddings2)
 
-        # Initialize merged DataFrame with all possible columns
-        all_columns = list(set(df1.columns) | set(df2.columns))
-        merged_df = pd.DataFrame(columns=all_columns)
+            # Find matches
+            matched_pairs = []
+            used_indices_df2 = set()
 
-        # Add matched rows
-        for idx1, idx2, _ in matched_pairs:
-            merged_row = {}
-            # Add common columns from df1
-            for col in common_columns:
-                merged_row[col] = df1.iloc[idx1][col]
-            # Add unique columns from both dataframes
-            for col in unique_cols_df1:
-                merged_row[col] = df1.iloc[idx1][col]
-            for col in unique_cols_df2:
-                merged_row[col] = df2.iloc[idx2][col]
-            merged_rows.append(merged_row)
+            for idx1, similarities in enumerate(similarity_matrix):
+                best_match_idx = np.argmax(similarities)
+                best_match_score = similarities[best_match_idx]
+                
+                if best_match_score >= similarity_threshold and best_match_idx not in used_indices_df2:
+                    matched_pairs.append((idx1, best_match_idx, best_match_score))
+                    used_indices_df2.add(best_match_idx)
 
-        # Add unmatched rows from df1
-        for idx in unmatched_df1_indices:
-            merged_row = {col: df1.iloc[idx][col] if col in df1.columns else None 
-                         for col in all_columns}
-            merged_rows.append(merged_row)
+            # Create merged dataset
+            merged_rows = []
+            unmatched_df1_indices = set(range(len(df1))) - set(p[0] for p in matched_pairs)
+            unmatched_df2_indices = set(range(len(df2))) - set(p[1] for p in matched_pairs)
 
-        # Add unmatched rows from df2
-        for idx in unmatched_df2_indices:
-            merged_row = {col: df2.iloc[idx][col] if col in df2.columns else None 
-                         for col in all_columns}
-            merged_rows.append(merged_row)
+            # Initialize merged DataFrame with all possible columns
+            all_columns = list(set(df1.columns) | set(df2.columns))
+            merged_df = pd.DataFrame(columns=all_columns)
 
-        merged_df = pd.DataFrame(merged_rows, columns=all_columns)
+            # Add matched rows
+            for idx1, idx2, _ in matched_pairs:
+                merged_row = {}
+                # Add common columns from df1
+                for col in common_columns:
+                    merged_row[col] = df1.iloc[idx1][col]
+                # Add unique columns from both dataframes
+                for col in unique_cols_df1:
+                    merged_row[col] = df1.iloc[idx1][col]
+                for col in unique_cols_df2:
+                    merged_row[col] = df2.iloc[idx2][col]
+                merged_rows.append(merged_row)
 
-        # Compile statistics
-        stats = {
-            'total_matches': len(matched_pairs),
-            'unmatched_df1': len(unmatched_df1_indices),
-            'unmatched_df2': len(unmatched_df2_indices),
-            'total_rows': len(merged_df),
-            'common_columns': common_columns,
-            'unique_cols_df1': unique_cols_df1,
-            'unique_cols_df2': unique_cols_df2,
-            'matched_pairs': matched_pairs
-        }
+            # Add unmatched rows from df1
+            for idx in unmatched_df1_indices:
+                merged_row = {col: df1.iloc[idx][col] if col in df1.columns else None 
+                             for col in all_columns}
+                merged_rows.append(merged_row)
 
-        return merged_df, stats
+            # Add unmatched rows from df2
+            for idx in unmatched_df2_indices:
+                merged_row = {col: df2.iloc[idx][col] if col in df2.columns else None 
+                             for col in all_columns}
+                merged_rows.append(merged_row)
+
+            merged_df = pd.DataFrame(merged_rows, columns=all_columns)
+
+            # Compile statistics
+            stats = {
+                'total_matches': len(matched_pairs),
+                'unmatched_df1': len(unmatched_df1_indices),
+                'unmatched_df2': len(unmatched_df2_indices),
+                'total_rows': len(merged_df),
+                'common_columns': common_columns,
+                'unique_cols_df1': unique_cols_df1,
+                'unique_cols_df2': unique_cols_df2,
+                'matched_pairs': matched_pairs,
+                'schema_matches': schema_matches,
+                'cleaned_rows_df1': len(df1) - len(df1_processed),
+                'cleaned_rows_df2': len(df2) - len(df2_processed),
+                'imputed_values_df1': df1.isna().sum().sum() - df1_processed.isna().sum().sum(),
+                'imputed_values_df2': df2.isna().sum().sum() - df2_processed.isna().sum().sum()
+            }
+
+            return merged_df, stats
+            
+        except Exception as e:
+            logger.error(f"Error in enhanced merge process: {str(e)}")
+            raise

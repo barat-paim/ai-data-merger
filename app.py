@@ -141,19 +141,38 @@ if st.button("Merge Datasets"):
             logger.error("No common columns found between datasets")
             st.error("No common columns found between the datasets. The datasets must share at least one column.")
         else:
-            with st.spinner("Merging datasets..."):
-                # Show common and unique columns
-                common_cols = set(df1.columns).intersection(set(df2.columns))
-                unique_cols_df1 = set(df1.columns) - set(df2.columns)
-                unique_cols_df2 = set(df2.columns) - set(df1.columns)
+            with st.spinner("Preprocessing and merging datasets..."):
+                # Show preprocessing progress
+                progress_text = "Operation in progress. Please wait."
+                my_bar = st.progress(0, text=progress_text)
                 
-                logger.info(f"Common columns: {common_cols}")
-                logger.info(f"Unique columns in df1: {unique_cols_df1}")
-                logger.info(f"Unique columns in df2: {unique_cols_df2}")
-                
+                # Merge with preprocessing
                 merged_df, stats = st.session_state.merger.merge_datasets(
                     df1, df2, similarity_threshold=similarity_threshold
                 )
+                
+                my_bar.progress(100, text="Preprocessing and merge complete!")
+                
+                # Display preprocessing statistics
+                st.subheader("Preprocessing Results")
+                preprocess_cols = st.columns(4)
+                
+                with preprocess_cols[0]:
+                    st.metric("Cleaned Rows (DB1)", stats['cleaned_rows_df1'])
+                with preprocess_cols[1]:
+                    st.metric("Cleaned Rows (DB2)", stats['cleaned_rows_df2'])
+                with preprocess_cols[2]:
+                    st.metric("Imputed Values (DB1)", stats['imputed_values_df1'])
+                with preprocess_cols[3]:
+                    st.metric("Imputed Values (DB2)", stats['imputed_values_df2'])
+                
+                # Display schema matches
+                st.subheader("Schema Matching Results")
+                schema_df = pd.DataFrame(
+                    list(stats['schema_matches'].items()),
+                    columns=['DB1 Column', 'DB2 Column']
+                )
+                st.dataframe(schema_df, use_container_width=True)
                 
                 # Display shape comparison
                 st.subheader("Dataset Shapes")
