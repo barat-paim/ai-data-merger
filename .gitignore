@@ -1,3 +1,5 @@
+requirements-full.txt
+.myenv39
 *.csv
 myenv39
 myenv39/
