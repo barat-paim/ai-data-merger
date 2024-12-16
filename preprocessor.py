@@ -111,6 +111,17 @@ class DataPreprocessor:
             logger.error(f"Error in value imputation: {str(e)}")
             raise
 
+    def match_schemas(self, df1: pd.DataFrame, df2: pd.DataFrame) -> Dict[str, str]:
+        """Match columns between two dataframes using enhanced matching algorithm."""
+        logger.info("Starting schema matching")
+        try:
+            schema_matches = self._match_columns(list(df1.columns), list(df2.columns))
+            logger.info(f"Found {len(schema_matches)} column matches")
+            return schema_matches
+        except Exception as e:
+            logger.error(f"Error in schema matching: {str(e)}")
+            raise
+
     def preprocess_datasets(self, df1: pd.DataFrame, df2: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, str]]:
         """Complete preprocessing pipeline for two datasets."""
         logger.info("Starting complete preprocessing pipeline")

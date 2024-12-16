@@ -52,9 +52,7 @@ class DatasetMerger:
 
     def merge_datasets(self, df1: pd.DataFrame, df2: pd.DataFrame, 
                       similarity_threshold: float = 0.8) -> Tuple[pd.DataFrame, Dict]:
-        """
-        Merge two datasets using both Jellyfish preprocessing and BERT-based matching.
-        """
+        """Merge two datasets using both Jellyfish preprocessing and BERT-based matching."""
         logger.info("Starting enhanced dataset merge process")
         
         try:
@@ -108,49 +106,42 @@ class DatasetMerger:
             merged_df = pd.DataFrame(columns=all_columns)
 
             # Add matched rows
-            for idx1, idx2, _ in matched_pairs:
+            for idx1, idx2, score in matched_pairs:
                 merged_row = {}
-                # Add common columns from df1
-                for col in common_columns:
+                # Add data from df1
+                for col in df1.columns:
                     merged_row[col] = df1.iloc[idx1][col]
-                # Add unique columns from both dataframes
-                for col in unique_cols_df1:
-                    merged_row[col] = df1.iloc[idx1][col]
-                for col in unique_cols_df2:
-                    merged_row[col] = df2.iloc[idx2][col]
+                # Add data from df2 for non-overlapping columns
+                for col2 in df2.columns:
+                    if col2 not in schema_matches.values():
+                        merged_row[col2] = df2.iloc[idx2][col2]
                 merged_rows.append(merged_row)
 
             # Add unmatched rows from df1
             for idx in unmatched_df1_indices:
                 merged_row = {col: df1.iloc[idx][col] if col in df1.columns else None 
-                             for col in all_columns}
+                            for col in all_columns}
                 merged_rows.append(merged_row)
 
             # Add unmatched rows from df2
             for idx in unmatched_df2_indices:
                 merged_row = {col: df2.iloc[idx][col] if col in df2.columns else None 
-                             for col in all_columns}
+                            for col in all_columns}
                 merged_rows.append(merged_row)
 
-            merged_df = pd.DataFrame(merged_rows, columns=all_columns)
+            # Create final merged DataFrame
+            merged_df = pd.DataFrame(merged_rows)
 
             # Compile statistics
             stats = {
                 'total_matches': len(matched_pairs),
+                'schema_matches': len(schema_matches),
                 'unmatched_df1': len(unmatched_df1_indices),
                 'unmatched_df2': len(unmatched_df2_indices),
-                'total_rows': len(merged_df),
-                'common_columns': common_columns,
-                'unique_cols_df1': unique_cols_df1,
-                'unique_cols_df2': unique_cols_df2,
-                'matched_pairs': matched_pairs,
-                'schema_matches': schema_matches,
-                'cleaned_rows_df1': len(df1) - len(df1_processed),
-                'cleaned_rows_df2': len(df2) - len(df2_processed),
-                'imputed_values_df1': df1.isna().sum().sum() - df1_processed.isna().sum().sum(),
-                'imputed_values_df2': df2.isna().sum().sum() - df2_processed.isna().sum().sum()
+                'matched_pairs': matched_pairs
             }
 
+            logger.info(f"Merge complete. Found {len(matched_pairs)} matching records")
             return merged_df, stats
             
         except Exception as e:
