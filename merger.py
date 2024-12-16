@@ -139,6 +139,21 @@ class DatasetMerger:
             # Drop temporary columns
             merged_df = merged_df.drop(columns=['_merge_idx'])
 
+            # Final imputation step to handle any remaining NaN values
+            logger.info("Performing final imputation on merged dataset")
+            for col in merged_df.columns:
+                if col not in ['is_matched', 'match_score']:  # Skip metadata columns
+                    if merged_df[col].dtype.kind in 'bifc':  # Numeric columns
+                        if merged_df[col].isna().any():
+                            merged_df[col].fillna(merged_df[col].median(), inplace=True)
+                    else:  # Non-numeric columns
+                        if merged_df[col].isna().any():
+                            mode_value = merged_df[col].mode()[0] if not merged_df[col].mode().empty else ''
+                            merged_df[col].fillna(mode_value, inplace=True)
+
+            # Verify no NaN values remain
+            assert not merged_df.isna().any().any(), "Found remaining NaN values after imputation"
+
             # Compile statistics
             stats = {
                 'total_matches': len(matched_pairs),
