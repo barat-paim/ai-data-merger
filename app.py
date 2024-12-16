@@ -155,16 +155,15 @@ if st.button("Merge Datasets"):
                 
                 # Display preprocessing statistics
                 st.subheader("Preprocessing Results")
-                preprocess_cols = st.columns(4)
+                preprocess_cols = st.columns(3)
                 
                 with preprocess_cols[0]:
-                    st.metric("Cleaned Rows (DB1)", stats['cleaned_rows_df1'])
+                    st.metric("Total Matches", stats['total_matches'])
                 with preprocess_cols[1]:
-                    st.metric("Cleaned Rows (DB2)", stats['cleaned_rows_df2'])
+                    st.metric("Schema Matches", len(stats['schema_matches']))
                 with preprocess_cols[2]:
-                    st.metric("Imputed Values (DB1)", stats['imputed_values_df1'])
-                with preprocess_cols[3]:
-                    st.metric("Imputed Values (DB2)", stats['imputed_values_df2'])
+                    match_rate = (stats['total_matches'] / min(len(df1), len(df2)) * 100)
+                    st.metric("Match Rate", f"{match_rate:.1f}%")
                 
                 # Display schema matches
                 st.subheader("Schema Matching Results")
@@ -189,30 +188,40 @@ if st.button("Merge Datasets"):
                 
                 # Display merge statistics
                 st.subheader("Merge Statistics")
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
                 col1.metric("Total Matches", stats['total_matches'])
                 col2.metric("Unmatched from DB1", stats['unmatched_df1'])
                 col3.metric("Unmatched from DB2", stats['unmatched_df2'])
-                col4.metric("Total Rows", stats['total_rows'])
+                
+                # Display matched pairs if available
+                if stats['matched_pairs']:
+                    st.subheader("Match Details")
+                    match_df = pd.DataFrame(
+                        stats['matched_pairs'],
+                        columns=['Index in DB1', 'Index in DB2', 'Match Score']
+                    )
+                    st.dataframe(match_df.style.format({
+                        'Match Score': '{:.2f}'
+                    }), use_container_width=True)
                 
                 # Display merged dataset with detailed information
                 st.subheader("Merged Dataset Preview")
                 st.dataframe(merged_df.head(20), use_container_width=True)
-                st.write(f"Total rows in merged dataset: {len(merged_df)}")
                 
-                # Show sample of matched rows
-                if stats['total_matches'] > 0:
-                    st.subheader("Sample of Matched Rows")
-                    matched_indices = [pair[0] for pair in stats.get('matched_pairs', [])][:5]
-                    if matched_indices:
-                        st.write("From Dataset 1:")
-                        st.dataframe(df1.iloc[matched_indices], use_container_width=True)
-                        st.write("Corresponding rows from Dataset 2:")
-                        st.dataframe(df2.iloc[matched_indices], use_container_width=True)
+                # Show column information
+                st.subheader("Column Information")
+                col_info = pd.DataFrame({
+                    'Column': merged_df.columns,
+                    'Type': merged_df.dtypes,
+                    'Non-Null Count': merged_df.count(),
+                    'Null Count': merged_df.isnull().sum(),
+                    'Null %': (merged_df.isnull().sum() / len(merged_df) * 100).round(2)
+                })
+                st.dataframe(col_info, use_container_width=True)
                 
-                # Export options
-                st.session_state.merged_df = merged_df  # Store merged df in session state
-                st.session_state.merge_completed = True  # Flag to indicate merge is done
+                # Store merged df in session state for export
+                st.session_state.merged_df = merged_df
+                st.session_state.merge_completed = True
 
 # Export functionality
 if 'merge_completed' in st.session_state and st.session_state.merge_completed:
