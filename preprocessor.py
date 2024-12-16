@@ -89,27 +89,22 @@ class DataPreprocessor:
             logger.error(f"Error in data cleaning: {str(e)}")
             raise
 
-    def impute_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Simple imputation of missing values."""
+    def _impute_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Impute missing values in the DataFrame."""
         logger.info("Starting missing value imputation")
-        try:
-            # For numeric columns, use median
-            numeric_columns = df.select_dtypes(include=['int64', 'float64']).columns
-            for col in numeric_columns:
-                if df[col].isnull().any():
-                    df[col].fillna(df[col].median(), inplace=True)
-
-            # For string columns, use mode
-            string_columns = df.select_dtypes(include=['object']).columns
-            for col in string_columns:
-                if df[col].isnull().any():
-                    df[col].fillna(df[col].mode()[0] if not df[col].mode().empty else '', inplace=True)
-            
-            logger.info("Completed missing value imputation")
-            return df
-        except Exception as e:
-            logger.error(f"Error in value imputation: {str(e)}")
-            raise
+        df = df.copy()  # Create a copy to avoid modifying the original
+        
+        for col in df.columns:
+            if df[col].isna().any():
+                if df[col].dtype.kind in 'bifc':  # Numeric columns
+                    median_value = df[col].median()
+                    df[col] = df[col].fillna(median_value)
+                else:  # Non-numeric columns
+                    mode_value = df[col].mode()[0] if not df[col].mode().empty else ''
+                    df[col] = df[col].fillna(mode_value)
+        
+        logger.info("Completed missing value imputation")
+        return df
 
     def match_schemas(self, df1: pd.DataFrame, df2: pd.DataFrame) -> Dict[str, str]:
         """Match columns between two dataframes using enhanced matching algorithm."""
@@ -131,8 +126,8 @@ class DataPreprocessor:
             df2_cleaned = self.clean_data(df2.copy())
             
             # Impute missing values
-            df1_imputed = self.impute_missing_values(df1_cleaned)
-            df2_imputed = self.impute_missing_values(df2_cleaned)
+            df1_imputed = self._impute_missing_values(df1_cleaned)
+            df2_imputed = self._impute_missing_values(df2_cleaned)
             
             # Match schemas using improved matching
             schema_matches = self._match_columns(list(df1_imputed.columns), list(df2_imputed.columns))
