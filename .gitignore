@@ -1,4 +1,7 @@
 *.csv
+myenv39
+myenv39/
+myenv39/*
 venv/
 venv/*
 node_modules/
