@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 import logging
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,61 @@ class DataPreprocessor:
             jellyfish_model_path (str, optional): Path to jellyfish model. Defaults to None.
         """
         self.jellyfish_model_path = jellyfish_model_path
-        # Initialize any other required attributes
+        # Initialize BERT model for semantic matching
+        self.bert_model = SentenceTransformer('all-MiniLM-L6-v2')
+        logger.info("Initialized DataPreprocessor with BERT and Jellyfish models")
+
+    def _enhance_column_name(self, col: str) -> str:
+        """Add context to column names by expanding common abbreviations and adding semantic context."""
+        col = col.lower().replace('_', ' ')
+        if 'id' in col:
+            col += ' identifier primary key'
+        if any(age in col for age in ['age', 'years']):
+            col += ' age in years numeric'
+        if any(name in col for name in ['name', 'firstname', 'lastname']):
+            col += ' person name text'
+        return col
+
+    def _match_columns(self, df1_columns: List[str], df2_columns: List[str]) -> Dict[str, str]:
+        """Match columns using both BERT embeddings and Jellyfish string similarity."""
+        matches = {}
+        
+        # Prepare enhanced column descriptions
+        df1_enhanced = [self._enhance_column_name(col) for col in df1_columns]
+        df2_enhanced = [self._enhance_column_name(col) for col in df2_columns]
+        
+        # Get BERT embeddings for enhanced column descriptions
+        embeddings1 = self.bert_model.encode(df1_enhanced)
+        embeddings2 = self.bert_model.encode(df2_enhanced)
+        
+        # Calculate similarity matrix using both BERT and Jellyfish
+        similarity_matrix = np.zeros((len(df1_columns), len(df2_columns)))
+        
+        for i, col1 in enumerate(df1_columns):
+            for j, col2 in enumerate(df2_columns):
+                # BERT similarity (cosine similarity of embeddings)
+                bert_sim = cosine_similarity([embeddings1[i]], [embeddings2[j]])[0][0]
+                
+                # Jellyfish similarity
+                jelly_sim = jellyfish.jaro_winkler_similarity(col1.lower(), col2.lower())
+                
+                # Combine similarities (weighted average)
+                similarity_matrix[i, j] = 0.7 * bert_sim + 0.3 * jelly_sim
+
+        # Find best matches using similarity matrix
+        threshold = 0.6  # Minimum similarity threshold
+        used_cols2 = set()
+        
+        for i, col1 in enumerate(df1_columns):
+            best_match_idx = np.argmax(similarity_matrix[i])
+            best_match_score = similarity_matrix[i][best_match_idx]
+            
+            if best_match_score >= threshold and best_match_idx not in used_cols2:
+                matches[col1] = df2_columns[best_match_idx]
+                used_cols2.add(best_match_idx)
+                logger.debug(f"Matched columns: {col1} -> {df2_columns[best_match_idx]} (score: {best_match_score:.2f})")
+        
+        return matches
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean data by removing duplicates and standardizing formats."""
@@ -55,55 +111,6 @@ class DataPreprocessor:
             logger.error(f"Error in value imputation: {str(e)}")
             raise
 
-    def match_schemas(self, df1: pd.DataFrame, df2: pd.DataFrame) -> Dict[str, str]:
-        """Match columns between two dataframes using jellyfish string matching."""
-        logger.info("Starting schema matching")
-        try:
-            column_matches = {}
-            for col1 in df1.columns:
-                best_match = None
-                best_score = 0
-                
-                # Get sample values from first dataframe
-                sample_values1 = df1[col1].dropna().head(5).astype(str).tolist()
-                
-                for col2 in df2.columns:
-                    # Calculate name similarity using multiple metrics
-                    name_jaro = jellyfish.jaro_winkler_similarity(col1, col2)
-                    name_levenshtein = 1 - (jellyfish.levenshtein_distance(col1, col2) / 
-                                          max(len(col1), len(col2)))
-                    
-                    # Get sample values from second dataframe
-                    sample_values2 = df2[col2].dropna().head(5).astype(str).tolist()
-                    
-                    # Calculate value similarity
-                    value_similarities = []
-                    for val1 in sample_values1:
-                        for val2 in sample_values2:
-                            value_similarities.append(
-                                jellyfish.jaro_winkler_similarity(str(val1), str(val2))
-                            )
-                    value_similarity = np.mean(value_similarities) if value_similarities else 0
-                    
-                    # Combine similarities (weighted average)
-                    match_score = (0.4 * name_jaro + 
-                                 0.3 * name_levenshtein + 
-                                 0.3 * value_similarity)
-                    
-                    if match_score > best_score:
-                        best_score = match_score
-                        best_match = col2
-                
-                if best_score > 0.7:  # Configurable threshold
-                    column_matches[col1] = best_match
-                    logger.debug(f"Matched columns: {col1} -> {best_match} (score: {best_score:.2f})")
-            
-            logger.info(f"Found {len(column_matches)} column matches")
-            return column_matches
-        except Exception as e:
-            logger.error(f"Error in schema matching: {str(e)}")
-            raise
-
     def preprocess_datasets(self, df1: pd.DataFrame, df2: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, str]]:
         """Complete preprocessing pipeline for two datasets."""
         logger.info("Starting complete preprocessing pipeline")
@@ -116,10 +123,10 @@ class DataPreprocessor:
             df1_imputed = self.impute_missing_values(df1_cleaned)
             df2_imputed = self.impute_missing_values(df2_cleaned)
             
-            # Match schemas
-            schema_matches = self.match_schemas(df1_imputed, df2_imputed)
+            # Match schemas using improved matching
+            schema_matches = self._match_columns(list(df1_imputed.columns), list(df2_imputed.columns))
+            logger.info(f"Found {len(schema_matches)} column matches")
             
-            logger.info("Completed preprocessing pipeline")
             return df1_imputed, df2_imputed, schema_matches
         except Exception as e:
             logger.error(f"Error in preprocessing pipeline: {str(e)}")
