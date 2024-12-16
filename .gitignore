@@ -1,3 +1,5 @@
+__init__.py
+harmony.egg-info/
 requirements-full.txt
 .myenv39
 *.csv

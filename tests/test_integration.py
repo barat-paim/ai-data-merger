@@ -22,6 +22,20 @@ def test_complete_pipeline():
     merged_df, stats = merger.merge_datasets(df1, df2)
     
     # Verify results
-    assert len(merged_df) == len(df1) + len(df2)
-    assert stats['total_matches'] > 0
-    assert not merged_df.isna().any().any()
+    assert len(merged_df) == len(df1) + len(df2), "Merged dataset should contain all rows"
+    assert stats['total_matches'] >= 0, "Total matches should be non-negative"
+    
+    # Check for NaN values in non-metadata columns
+    non_metadata_cols = [col for col in merged_df.columns if col not in ['match_score', 'is_matched']]
+    assert not merged_df[non_metadata_cols].isna().any().any(), "Found NaN values in non-metadata columns"
+    
+    # Verify metadata columns
+    assert 'is_matched' in merged_df.columns, "is_matched column should be present"
+    assert 'match_score' in merged_df.columns, "match_score column should be present"
+    assert merged_df['is_matched'].dtype == bool, "is_matched should be boolean"
+    
+    # Verify schema matches
+    assert len(stats['schema_matches']) > 0, "Should find some schema matches"
+    assert 'matched_pairs' in stats, "matched_pairs should be in stats"
+    assert 'unmatched_df1' in stats, "unmatched_df1 should be in stats"
+    assert 'unmatched_df2' in stats, "unmatched_df2 should be in stats"

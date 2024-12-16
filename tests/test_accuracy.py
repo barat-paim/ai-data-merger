@@ -2,6 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from merger import DatasetMerger
+from preprocessor import DataPreprocessor
 
 def generate_datasets_with_ground_truth(size=100, match_ratio=0.7):
     """Generate test datasets with known ground truth matches."""
@@ -27,6 +28,7 @@ def generate_datasets_with_ground_truth(size=100, match_ratio=0.7):
         'full_name': [name.upper() for name in matched_names],  # Names in uppercase
         'age_years': matched_ages + np.random.randint(-2, 3, num_matches)  # Slightly different ages
     }
+    df2 = pd.DataFrame(df2_data)
     
     # Add unmatched records to both dataframes
     unmatched_size = size - num_matches
@@ -137,6 +139,12 @@ def test_schema_matching_accuracy():
     }
     
     # Compare actual schema matches with expected
-    actual_matches = stats.get('schema_matches', 0)
+    actual_matches = stats['schema_matches']  # Access schema_matches directly
     assert len(actual_matches) >= len(expected_matches), \
         f"Found only {len(actual_matches)} schema matches, expected at least {len(expected_matches)}"
+    
+    # Verify that the expected matches are present
+    for key, value in expected_matches.items():
+        assert key in actual_matches, f"Expected match for {key} not found"
+        assert actual_matches[key] == value, \
+            f"Expected {key} to match with {value}, but got {actual_matches[key]}"
