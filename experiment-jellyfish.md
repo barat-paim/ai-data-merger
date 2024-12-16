@@ -4,14 +4,14 @@
 
 ```bash
 # Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv myenv39
+source myenv39/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 
 # Run tests
-python -m pytest tests/
+python3 -m pytest tests/
 ```
 
 ## Test Categories

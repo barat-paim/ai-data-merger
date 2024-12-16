@@ -2,6 +2,10 @@ import pytest
 import pandas as pd
 from preprocessor import DataPreprocessor
 from merger import DatasetMerger
+import logging
+
+# Configure logging for tests
+logging.basicConfig(level=logging.INFO)
 
 @pytest.fixture
 def preprocessor():

@@ -9,6 +9,9 @@ import warnings
 import logging
 from preprocessor import DataPreprocessor
 
+# Configure logger
+logger = logging.getLogger(__name__)
+
 # Suppress specific PyTorch warnings
 warnings.filterwarnings('ignore', message='.*torch.classes.*')
 logging.getLogger('transformers').setLevel(logging.ERROR)
@@ -21,6 +24,7 @@ class DatasetMerger:
             self.bert_model = SentenceTransformer(model_name)
         
         self.preprocessor = DataPreprocessor(jellyfish_model_path)
+        logger.info(f"Initialized DatasetMerger with model: {model_name}")
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         torch.set_grad_enabled(False)
         self.bert_model.to(self.device)
@@ -60,6 +64,11 @@ class DatasetMerger:
             
             # Use schema matches to align columns for comparison
             common_columns = list(schema_matches.keys())
+            
+            # Calculate unique columns for each dataset
+            unique_cols_df1 = list(set(df1.columns) - set(common_columns))
+            unique_cols_df2 = list(set(df2.columns) - set(schema_matches.values()))
+            
             df1_common = df1_processed[common_columns]
             df2_common = df2_processed[[schema_matches[col] for col in common_columns]]
             

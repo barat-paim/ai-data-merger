@@ -7,9 +7,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DataPreprocessor:
-    def __init__(self):
-        """Initialize the preprocessor with jellyfish string matching."""
-        logger.info("Initialized DataPreprocessor with jellyfish string matching")
+    def __init__(self, jellyfish_model_path=None):
+        """Initialize the data preprocessor.
+        
+        Args:
+            jellyfish_model_path (str, optional): Path to jellyfish model. Defaults to None.
+        """
+        self.jellyfish_model_path = jellyfish_model_path
+        # Initialize any other required attributes
 
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean data by removing duplicates and standardizing formats."""
